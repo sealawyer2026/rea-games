@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rea-games · 帧帧对上经典街机</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0a14;color:#fff;font-family:'PingFang SC',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .wrap{max-width:900px;padding:40px 20px;text-align:center}
+  h1{font-size:42px;background:linear-gradient(90deg,#fff,#4ec0ca);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:12px}
+  .sub{color:#888;margin-bottom:48px;font-size:15px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:20px}
+  .card{background:#14141f;border:1px solid #26263a;border-radius:16px;padding:32px 20px;text-decoration:none;color:#fff;transition:transform .2s,border-color .2s;display:block}
+  .card:hover{transform:translateY(-4px);border-color:#4ec0ca}
+  .card .ico{font-size:40px;margin-bottom:14px}
+  .card h3{font-size:18px;margin-bottom:8px}
+  .card p{color:#888;font-size:13px;line-height:1.6}
+  footer{margin-top:48px;color:#555;font-size:12px}
+</style></head>
+<body><div class="wrap">
+<h1>rea-games</h1>
+<div class="sub">帧帧对上的经典街机复刻 · 机制致敬 · 素材全原创 · 离线可玩</div>
+<div class="grid">
+  <a class="card" href="./pong/"><div class="ico">🏓</div><h3>Pong 对战</h3><p>1972 经典机制复刻<br>击球角=击中位置 · 11分制</p></a>
+  <a class="card" href="./breakout/"><div class="ico">🧱</div><h3>打砖块</h3><p>1976 分色砖阵<br>上排7分 · 3命全清</p></a>
+  <a class="card" href="./snake/"><div class="ico">🐍</div><h3>贪吃蛇</h3><p>125ms 经典步进<br>吃5加速 · 转向缓冲</p></a>
+  <a class="card" href="./flappy/"><div class="ico">🐦</div><h3>穿越鸟</h3><p>重力1400 · 冲量-380<br>管间隙150 · 倾角手感</p></a>
+</div>
+<footer>rea-games © 2026 · Einstein-OS 出品 · Phaser 3.87</footer>
+</div></body></html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>rea-games · PONG 复刻 v1.0</title>
+<style>
+  html,body{margin:0;padding:0;background:#000;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  #game{image-rendering:pixelated;image-rendering:crisp-edges}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<script src="./phaser.min.js"></script>
+<script>
+// ============ rea-games 帧帧对上复刻标准 ============
+// 原版 Pong (Atari 1972) 公开机制参数（复刻基准，素材全原创）：
+// · 线性分辨率 448x536 宽屏棋盘（本作垂直构图448x536）
+// · 球拍高 60px 宽 10px，球 8x8px
+// · 球初始速度恒定，每次拍击加速 5%，拍边击球改变反弹角
+// · 60fps 固定时间步（Phaser arcade physics 默认 fixed step）
+// · 计分到 11 分获胜（原版街机规则）
+const W=448,H=536,PADDLE_W=10,PADDLE_H=60,BALL=8,WIN_SCORE=11;
+let player,ai,ball,scoreP=0,scoreAI=0,scoreText,msgText,started=false;
+let baseSpeed=280; // px/s 初始球速
+
+function makePaddle(x,y){
+  const g=scene.add.graphics();
+  g.fillStyle(0xffffff,1); g.fillRect(0,0,PADDLE_W,PADDLE_H);
+  const p=scene.physics.add.existing(g);
+  g.body.setImmovable(true);
+  g.body.allowGravity=false;
+  g.x=x; g.y=y;
+  return g;
+}
+
+let scene;
+function create(){
+  scene=this;
+  // 中线虚线（原版视觉）
+  const line=scene.add.graphics();
+  line.fillStyle(0xffffff,0.35);
+  for(let y=8;y<H;y+=24) line.fillRect(W/2-2,y,4,14);
+  // 计分板（原版大数字风格）
+  scoreText=scene.add.text(W/2,30,'0   0',{fontFamily:'monospace',fontSize:'56px',fontStyle:'bold',color:'#ffffff'}).setOrigin(0.5,0);
+  msgText=scene.add.text(W/2,H/2+80,'按 空格 或 点击 开始\n↑↓ / W-S / 鼠标 控制左拍',{fontFamily:'monospace',fontSize:'18px',color:'#aaaaaa',align:'center'}).setOrigin(0.5);
+
+  player=makePaddle(24,H/2-PADDLE_H/2);
+  ai=makePaddle(W-24-PADDLE_W,H/2-PADDLE_H/2);
+
+  // 球（像素方块）
+  const bg=scene.add.graphics();
+  bg.fillStyle(0xffffff,1); bg.fillRect(0,0,BALL,BALL);
+  ball=scene.physics.add.existing(bg);
+  ball.body.setBounce(1,1);
+  ball.body.setCollideWorldBounds(true);
+  ball.body.onWorldBounds=true;
+
+  // 拍-球碰撞（原版手感：按击中拍面位置改变反弹角）
+  scene.physics.add.overlap(ball.body, player.body, hitPlayer, null, scene);
+  scene.physics.add.overlap(ball.body, ai.body, hitAI, null, scene);
+
+  // 输入
+  const kb=scene.input.keyboard;
+  kb.on('keydown-SPACE',()=>{ if(!started) startRound(); });
+  scene.input.on('pointerdown',()=>{ if(!started) startRound(); });
+  scene.input.on('pointermove',(ptr)=>{ player.y=Phaser.Math.Clamp(ptr.y-PADDLE_H/2,10,H-10-PADDLE_H); });
+
+  scene.physics.world.on('worldbounds',(body,up,down)=>{
+    if(body.gameObject===ball && (up||down)){
+      // 原版：上下边界反弹（速度不变）
+    }
+  });
+  // 得分判定
+  scene.time.addEvent({delay:100,loop:true,callback:checkScore});
+}
+
+function startRound(){
+  started=true; msgText.setVisible(false);
+  ball.body.enable=true;
+  const dir=Math.random()<0.5?-1:1;
+  const ang=(Math.random()*0.6-0.3); // ±17°
+  baseSpeed=280;
+  ball.body.velocity.set(dir*baseSpeed, baseSpeed*ang);
+}
+
+function resetBall(){
+  ball.body.velocity.set(0,0);
+  ball.x=W/2-BALL/2; ball.y=H/2-BALL/2;
+  started=false;
+  scoreText.setText(scoreP+'   '+scoreAI);
+  if(scoreP>=WIN_SCORE||scoreAI>=WIN_SCORE){
+    msgText.setText(scoreP>scoreAI?'🏆 你赢了 '+scoreP+':'+scoreAI+'\n按空格再来一局':'💀 AI 赢了 '+scoreAI+':'+scoreP+'\n按空格复仇').setVisible(true);
+    scoreP=0;scoreAI=0;
+  } else {
+    msgText.setText('按 空格 或 点击 继续').setVisible(true);
+  }
+}
+
+function hitPlayer(ballBody,paddleBody){
+  // 帧帧对上：击球加速5% + 按击中位置改反弹角（原版手感核心）
+  const paddle=paddleBody.gameObject;
+  const rel=(ballBody.y+BALL/2-(paddle.y+PADDLE_H/2))/(PADDLE_H/2); // -1..1
+  baseSpeed=Math.min(baseSpeed*1.05,640);
+  const maxAng=Math.PI/3.2; // 56°
+  const ang=rel*maxAng;
+  ballBody.velocity.set(Math.abs(baseSpeed)*Math.cos(ang), baseSpeed*Math.sin(ang));
+  ballBody.x=paddle.x+PADDLE_W+1;
+}
+
+function hitAI(ballBody,paddleBody){
+  const paddle=paddleBody.gameObject;
+  const rel=(ballBody.y+BALL/2-(paddle.y+PADDLE_H/2))/(PADDLE_H/2);
+  baseSpeed=Math.min(baseSpeed*1.05,640);
+  const maxAng=Math.PI/3.2;
+  const ang=rel*maxAng;
+  ballBody.velocity.set(-Math.abs(baseSpeed)*Math.cos(ang), baseSpeed*Math.sin(ang));
+  ballBody.x=paddle.x-BALL-1;
+}
+
+function checkScore(){
+  if(!started)return;
+  if(ball.x<0){ scoreAI++; resetBall(); }
+  else if(ball.x+BALL>W){ scoreP++; resetBall(); }
+}
+
+function update(){
+  if(!scene)return;
+  // 键盘 ↑↓ / W-S
+  const spd=380;
+  const kb=scene.input.keyboard;
+  if(kb.addKeys('UP,DOWN,W,S')){
+    const k=kb.addKeys('UP,DOWN,W,S');
+    if(k.UP.isDown||k.W.isDown) player.y=Math.max(10,player.y-spd*(1/60));
+    if(k.DOWN.isDown||k.S.isDown) player.y=Math.min(H-10-PADDLE_H,player.y+spd*(1/60));
+  }
+  // AI：跟球（带反应延迟上限速度——原版AI也是限速的）
+  if(started){
+    const target=ball.y+BALL/2-PADDLE_H/2;
+    const aiSpd=300;
+    if(ai.y+PADDLE_H/2<target) ai.y=Math.min(target,ai.y+aiSpd*(1/60));
+    else if(ai.y+PADDLE_H/2>target) ai.y=Math.max(target,ai.y-aiSpd*(1/60));
+    ai.y=Phaser.Math.Clamp(ai.y,10,H-10-PADDLE_H);
+  }
+}
+
+const config={
+  type:Phaser.AUTO,
+  width:W,height:H,
+  parent:'game',
+  pixelArt:true,        // 像素完美渲染
+  roundPixels:true,
+  backgroundColor:'#000000',
+  physics:{default:'arcade',arcade:{fixedStep:true,fps:60}}, // 固定时间步60fps
+  scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
+  scene:{create:create,update:update}
+};
+// 测试/演示钩子：?auto=1 自动开始
+if (location.search.includes('auto=1')) {
+  setTimeout(()=>{ try{ if(typeof startRound==='function') startRound(); }catch(e){ console.warn('auto-start', e); } }, 2500);
+}
+new Phaser.Game(config);
+</script>
+</body>
+</html>

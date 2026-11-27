@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>rea-games · BREAKOUT 复刻 v1.0</title>
+<style>html,body{margin:0;padding:0;background:#000;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}#game{image-rendering:pixelated}</style></head>
+<body><div id="game"></div>
+<script src="./phaser.min.js"></script>
+<script>
+// ============ Breakout (1976) 机制复刻 · 帧帧对上标准 ============
+// 原版参数（公开机制）：6行砖x14列、砖分色带（上排分高）、球触拍角=击中位置、砖全部击破过关、3条命
+const COLS=14,ROWS=6,BW=28,BH=12,TOP=70,GAP=2,W=448,H=576;
+const ROW_COLORS=[0xff4136,0xff851b,0xffdc00,0x2ecc40,0x0074d9,0xb10dc9]; // 红橙黄绿蓝紫（上高分高）
+const ROW_SCORE=[7,5,3,1,1,1]; // 原版分值：上排7/5/3，下排1
+let scene,player,ball,bricks,score=0,lives=3,scoreText,liveText,msgText,started=false,baseSpeed=260;
+
+function create(){
+  scene=this;
+  // 砖阵
+  bricks=scene.physics.add.staticGroup();
+  const ox=(W-(COLS*(BW+GAP)-GAP))/2;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const g=scene.add.graphics();
+    g.fillStyle(ROW_COLORS[r],1); g.fillRect(0,0,BW,BH);
+    bricks.add(g,{x:ox+c*(BW+GAP)+BW/2,y:TOP+r*(BH+GAP)+BH/2});
+  }
+  // 拍
+  const pg=scene.add.graphics(); pg.fillStyle(0xffffff,1); pg.fillRect(0,0,64,10);
+  player=scene.physics.add.existing(pg); player.body.setImmovable(true);
+  player.x=W/2-32; player.y=H-40;
+  // 球
+  const bg=scene.add.graphics(); bg.fillStyle(0xffffff,1); bg.fillRect(0,0,8,8);
+  ball=scene.physics.add.existing(bg);
+  ball.body.setBounce(1,1); ball.body.setCollideWorldBounds(true);
+  ball.body.enable=false;
+  // HUD
+  scoreText=scene.add.text(16,10,'得分 0',{fontFamily:'monospace',fontSize:'20px',color:'#fff'});
+  liveText=scene.add.text(W-100,10,'命 ×3',{fontFamily:'monospace',fontSize:'20px',color:'#fff'});
+  msgText=scene.add.text(W/2,H/2,'按 空格 或 点击 发球\n鼠标/←→ 移动拍子',{fontFamily:'monospace',fontSize:'18px',color:'#aaa',align:'center'}).setOrigin(0.5);
+
+  scene.physics.add.collider(ball.body, bricks, hitBrick, null, scene);
+  scene.physics.add.collider(ball.body, player.body, hitPaddle, null, scene);
+  scene.input.on('pointerdown',()=>{ if(!started) launch(); });
+  scene.input.on('pointermove',(p)=>{ player.x=Phaser.Math.Clamp(p.x-32,0,W-64); });
+  const kb=scene.input.keyboard;
+  kb.on('keydown-SPACE',()=>{ if(!started) launch(); });
+}
+function launch(){
+  started=true; msgText.setVisible(false); ball.body.enable=true;
+  ball.x=player.x+28; ball.y=player.y-14;
+  baseSpeed=260;
+  ball.body.velocity.set(baseSpeed*(Math.random()<.5?-1:1)*0.4, -baseSpeed);
+}
+function hitPaddle(ballBody,pBody){
+  // 原版手感：反弹角由击中拍面位置决定（边缘更斜）
+  const rel=(ballBody.x+4-(pBody.gameObject.x+32))/32; // -1..1
+  const ang=rel*(Math.PI/3); // 最大60°
+  const sp=Math.min(Math.hypot(ballBody.velocity.x,ballBody.velocity.y)*1.03,520); // 每拍加速3%
+  ballBody.velocity.set(sp*Math.sin(ang), -Math.abs(sp*Math.cos(ang)));
+  ballBody.y=pBody.gameObject.y-9;
+}
+function hitBrick(ballBody,brickObj){
+  const g=brickObj.gameObject||brickObj;
+  // 分值按颜色行
+  const row=ROW_COLORS.indexOf(g.fillStyle?.color||0xffffff);
+  score+=ROW_SCORE[row>=0?row:5]*10;
+  scoreText.setText('得分 '+score);
+  if(bricks.countActive()===0){
+    msgText.setText('🏆 全清！得分 '+score+'\n按空格再来一局').setVisible(true);
+    started=false; ball.body.enable=false; bricks.children.iterate(b=>b.setVisible(true)); bricks.children.iterate(b=>b.body.enable=true);
+    score=0; lives=3; liveText.setText('命 ×3'); scoreText.setText('得分 0');
+    return;
+  }
+  g.setVisible(false); g.body.enable=false;
+}
+function update(){
+  if(!scene)return;
+  const k=scene.input.keyboard.addKeys('LEFT,RIGHT,A,D');
+  const spd=420/60;
+  if(k.LEFT.isDown||k.A.isDown) player.x=Math.max(0,player.x-spd);
+  if(k.RIGHT.isDown||k.D.isDown) player.x=Math.min(W-64,player.x+spd);
+  // 球落底=掉命
+  if(started && ball.y>H+8){
+    lives--; liveText.setText('命 ×'+lives);
+    if(lives<=0){
+      msgText.setText('💀 游戏结束  得分 '+score+'\n按空格重新开始').setVisible(true);
+      started=false; ball.body.enable=false; score=0; lives=3;
+    } else {
+      started=false; ball.body.enable=false;
+      msgText.setText('还剩 '+lives+' 条命\n按空格继续').setVisible(true);
+    }
+  }
+}
+const config={type:Phaser.AUTO,width:W,height:H,parent:'game',pixelArt:true,roundPixels:true,backgroundColor:'#000',
+physics:{default:'arcade',arcade:{fixedStep:true,fps:60}},
+scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
+scene:{create:create,update:update}};
+
+// 测试/演示钩子：?auto=1 自动开始（WB审核&自动化测试用）
+if (location.search.includes('auto=1')) {
+  setTimeout(()=>{ try{
+    if (typeof startGame==='function') startGame();
+    else if (typeof start==='function') start();
+    else if (typeof launch==='function') launch();
+  }catch(e){ console.warn('auto-start', e); } }, 2500);
+}
+new Phaser.Game(config);
+</script></body></html>

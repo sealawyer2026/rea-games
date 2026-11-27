@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>rea-games · SNAKE 复刻 v1.0</title>
+<style>html,body{margin:0;padding:0;background:#000;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}#game{image-rendering:pixelated}</style></head>
+<body><div id="game"></div>
+<script src="./phaser.min.js"></script>
+<script>
+// ============ Snake 机制复刻 · 帧帧对上标准 ============
+// 原版机制：固定网格（24x24 cell 20px）、固定步进移动（经典8格/秒=125ms/步）、吃食物+1长+加速微调、撞墙/撞己即死
+// 经典手感：转向缓冲队列（一步最多转一次，防180°自杀）
+const CELL=20,GW=24,GH=24,W=GW*CELL,H=GH*CELL+50; // 顶部HUD 50px
+let scene,snake,dir,dirQueue,food,score=0,scoreText,msgText,dead=false,stepMs=125,stepTimer,foods=0;
+const GREEN=0x2ecc40,DGREEN=0x1a8f2a,RED=0xff4136;
+
+function create(){
+  scene=this;
+  // HUD
+  scoreText=scene.add.text(16,12,'长度 3 · 得分 0',{fontFamily:'monospace',fontSize:'20px',color:'#fff'});
+  msgText=scene.add.text(W/2,H/2+20,'按 空格 或 点击 开始\n方向键/WASD 控制',{fontFamily:'monospace',fontSize:'18px',color:'#aaa',align:'center'}).setOrigin(0.5);
+  // 网格背景微点
+  const grid=scene.add.graphics(); grid.fillStyle(0x111111,1);
+  for(let x=0;x<GW;x++)for(let y=0;y<GH;y++) grid.fillRect(x*CELL,y*CELL+50,CELL-1,CELL-1);
+  reset();
+  scene.input.on('pointerdown',()=>{ if(dead||!stepTimer) start(); });
+  scene.input.keyboard.on('keydown-SPACE',()=>{ if(dead||!stepTimer) start(); });
+  const kb=scene.input.keyboard;
+  kb.on('keydown-UP',()=>turn(0,-1)); kb.on('keydown-DOWN',()=>turn(0,1));
+  kb.on('keydown-LEFT',()=>turn(-1,0)); kb.on('keydown-RIGHT',()=>turn(1,0));
+  kb.on('keydown-W',()=>turn(0,-1)); kb.on('keydown-S',()=>turn(0,1));
+  kb.on('keydown-A',()=>turn(-1,0)); kb.on('keydown-D',()=>turn(1,0));
+}
+function reset(){
+  if(snake)snake.forEach(s=>s.g.destroy());
+  if(food)food.g.destroy();
+  snake=[{x:12,y:12},{x:11,y:12},{x:10,y:12}].map(p=>({...p,g:drawCell(p.x,p.y,GREEN)}));
+  dir={x:1,y:0}; dirQueue=[];
+  placeFood();
+  dead=false; score=0; foods=0; stepMs=125;
+  scoreText.setText('长度 3 · 得分 0');
+}
+function drawCell(x,y,color){
+  const g=scene.add.graphics();
+  g.fillStyle(color,1); g.fillRect(x*CELL+1,y*CELL+50+1,CELL-2,CELL-2);
+  return g;
+}
+function placeFood(){
+  let fx,fy,ok=false;
+  while(!ok){
+    fx=Phaser.Math.Between(0,GW-1); fy=Phaser.Math.Between(0,GH-1);
+    ok=!snake.some(s=>s.x===fx&&s.y===fy);
+  }
+  food={x:fx,y:fy,g:drawCell(fx,fy,RED)};
+}
+function turn(x,y){
+  // 转向缓冲队列 + 禁止180°回头
+  const last=dirQueue.length?dirQueue[dirQueue.length-1]:dir;
+  if(last.x===-x&&last.y===-y)return;
+  if(last.x===x&&last.y===y)return;
+  if(dirQueue.length<3)dirQueue.push({x,y});
+}
+function start(){
+  if(stepTimer){stepTimer.remove();stepTimer=null;}
+  reset();
+  msgText.setVisible(false);
+  dead=false;
+  stepTimer=scene.time.addEvent({delay:stepMs,loop:true,callback:step});
+}
+function step(){
+  if(dead)return;
+  if(dirQueue.length)dir=dirQueue.shift();
+  const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  // 撞墙/撞己
+  const hitWall=head.x<0||head.x>=GW||head.y<0||head.y>=GH;
+  const hitSelf=snake.some((s,i)=>i<snake.length-1&&s.x===head.x&&s.y===head.y);
+  if(hitWall||hitSelf){
+    stepTimer.remove(); stepTimer=null; dead=true;
+    msgText.setText('💀 死亡 · 长度 '+snake.length+' · 得分 '+score+'\n按 空格 重开').setVisible(true);
+    return;
+  }
+  // 吃食物
+  let grew=false;
+  if(head.x===food.x&&head.y===food.y){
+    foods++; score+=10;
+    food.g.destroy(); placeFood();
+    // 每吃5个加速一档（原版手感：越吃越快）
+    if(foods%5===0&&stepMs>70){ stepMs-=7; stepTimer.remove(); stepTimer=scene.time.addEvent({delay:stepMs,loop:true,callback:step}); }
+    grew=true;
+  }
+  // 移动
+  const tail=snake.pop();
+  if(!grew){ tail.g.destroy(); }
+  const oldHead=snake[0];
+  oldHead.g.clear(); oldHead.g.fillStyle(DGREEN,1); oldHead.g.fillRect(oldHead.x*CELL+1,oldHead.y*CELL+51,CELL-2,CELL-2);
+  const nh={...head,g:drawCell(head.x,head.y,GREEN)};
+  snake.unshift(nh);
+  if(grew)snake.push(tail); // 变长时尾巴保留
+  scoreText.setText('长度 '+snake.length+' · 得分 '+score);
+}
+const config={type:Phaser.AUTO,width:W,height:H,parent:'game',pixelArt:true,roundPixels:true,backgroundColor:'#000',
+scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
+scene:{create:create}};
+
+// 测试/演示钩子：?auto=1 自动开始（WB审核&自动化测试用）
+if (location.search.includes('auto=1')) {
+  setTimeout(()=>{ try{
+    if (typeof startGame==='function') startGame();
+    else if (typeof start==='function') start();
+    else if (typeof launch==='function') launch();
+  }catch(e){ console.warn('auto-start', e); } }, 2500);
+}
+new Phaser.Game(config);
+</script></body></html>
